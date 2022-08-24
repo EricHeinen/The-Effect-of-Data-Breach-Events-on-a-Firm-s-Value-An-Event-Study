@@ -1,0 +1,1032 @@
+---
+title: "Time series forecast samplex8"
+author: "Eric Heinen"
+date: '2022-06-17'
+output:
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE)
+```
+```{css, echo=FALSE}
+.answer {
+  background-color: #bcd3f2;
+  border: 2px #80a4ed;
+  border-radius: 5px;
+  padding: 10px;
+}
+```
+
+```{r}
+library(quantmod)
+library(tseries) 
+library(timeSeries)
+library(forecast)
+library(xts)
+library(ggplot2)
+library(tidyverse)
+library(tidyquant)
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(estudy2)
+library(scales)
+library(BSDA)
+```
+
+# Define variables
+```{r}
+#Import dataset
+List_data_breaches <- read_excel("List data breaches.xlsx")
+
+#Define stocknames
+stock <- data.frame(List_data_breaches$Stockname)
+
+#Define data breach 1 variables
+#Event of interest
+DB1 <- as.Date(List_data_breaches$`Data breach 1`)
+
+#Actual returns
+AFrom1 <- data.frame(List_data_breaches$Ewfrom1)
+ATo1 <- data.frame(List_data_breaches$Ewto1)
+
+#Creating event window of 5 workdays: -2, -1, EVENT(0), +1, +2
+ABFrom1 <- data.frame(List_data_breaches$ABfrom1)
+ABTo1 <- data.frame(List_data_breaches$ABto1)
+
+#Define data breach 2 variables
+#Event of interest
+DB2 <- as.Date(List_data_breaches$`Data breach 2`)
+
+#Actual returns
+AFrom2 <- data.frame(List_data_breaches$Ewfrom2)
+ATo2 <- data.frame(List_data_breaches$Ewto2)
+
+#Creating event window of 5 workdays: -2, -1, EVENT(0), +1, +2
+ABFrom2 <- data.frame(List_data_breaches$ABfrom2)
+ABTo2 <- data.frame(List_data_breaches$ABto2)
+```
+
+# Data breach #1
+## Retrieving data
+```{r}
+#Actual returns
+getSymbols(stock[1,], src="yahoo", 
+           from = AFrom1[1,],
+           to = ATo1[1,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+T1.Close_Prices <- T[,4]
+
+getSymbols(stock[2,], src="yahoo", 
+           from = AFrom1[2,],
+           to = ATo1[2,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+BCE1.Close_Prices <- BCE.TO[,4]
+
+getSymbols(stock[3,], src="yahoo", 
+           from = AFrom1[3,],
+           to = ATo1[3,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+C1.Close_Prices <- C[,4]
+
+getSymbols(stock[4,], src="yahoo", 
+           from = AFrom1[4,],
+           to = ATo1[4,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+JPM1.Close_Prices <- JPM[,4]
+
+par(mfrow=c(2,2))
+plot(T1.Close_Prices, main = "AT&T (data breach #1)")
+plot(BCE1.Close_Prices, main = "Bell Canada (data breach #1)")
+plot(C1.Close_Prices, main = "Citigroup (data breach #1)")
+plot(JPM1.Close_Prices, main = "JP Morgan Chase (data breach #1)")
+```
+
+
+## Checking data
+```{r}
+par(mfrow=c(1,2))
+Acf(T1.Close_Prices, main="ACF")
+Pacf(T1.Close_Prices, main="PACF")
+
+par(mfrow=c(1,2))
+Acf(BCE1.Close_Prices, main="ACF")
+Pacf(BCE1.Close_Prices, main="PACF")
+
+par(mfrow=c(1,2))
+Acf(C1.Close_Prices, main="ACF")
+Pacf(C1.Close_Prices, main="PACF")
+
+par(mfrow=c(1,2))
+Acf(JPM1.Close_Prices, main="ACF")
+Pacf(JPM1.Close_Prices, main="PACF")
+```
+
+```{r}
+#ADF test for p-value
+#Should be higher than 0.05 to accept H0
+print(adf.test(T1.Close_Prices)) 
+print(adf.test(BCE1.Close_Prices)) 
+print(adf.test(C1.Close_Prices)) 
+print(adf.test(JPM1.Close_Prices)) 
+```
+
+
+## Arima models
+```{r}
+#auto.arima model
+fit.T1.A = auto.arima(T1.Close_Prices, seasonal = FALSE) #0,1,0
+fit.BCE1.A = auto.arima(BCE1.Close_Prices, seasonal = FALSE) #0,1,0
+fit.C1.A = auto.arima(C1.Close_Prices, seasonal = FALSE) #0,1,0
+fit.JPM1.A = auto.arima(JPM1.Close_Prices, seasonal = FALSE) #1,0,2
+
+#Playing around with parameters
+fit.T1.B = Arima(T1.Close_Prices, order = c(1,2,4))
+fit.BCE1.B = Arima(BCE1.Close_Prices, order = c(1,2,4))
+fit.C1.B = Arima(C1.Close_Prices, order = c(1,2,4))
+fit.JPM1.B = Arima(JPM1.Close_Prices, order = c(1,2,4))
+
+#Playing around with parameters
+fit.T1.C = Arima(T1.Close_Prices, order = c(1,1,0))
+fit.BCE1.C = Arima(BCE1.Close_Prices, order = c(1,1,0))
+fit.C1.C = Arima(C1.Close_Prices, order = c(1,1,0))
+fit.JPM1.C = Arima(JPM1.Close_Prices, order = c(1,1,0))
+
+#Standard default Arima model
+fit.T1.D = Arima(T1.Close_Prices, order = c(1,1,1))
+fit.BCE1.D = Arima(BCE1.Close_Prices, order = c(1,1,1))
+fit.C1.D = Arima(C1.Close_Prices, order = c(1,1,1))
+fit.JPM1.D = Arima(JPM1.Close_Prices, order = c(1,1,1))
+```
+
+
+```{r}
+#Plots of Arima models
+term<-5
+
+#Forecasting AT&T
+fcastT1.1 <- forecast(fit.T1.A, h=term)
+fcastT2.1 <- forecast(fit.T1.B, h=term)
+fcastT3.1 <- forecast(fit.T1.C, h=term)
+fcastT4.1 <- forecast(fit.T1.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastT1.1)
+plot(fcastT2.1)
+plot(fcastT3.1)
+plot(fcastT4.1)
+
+#Forecasting Bell Canada
+fcastBCE1.1 <- forecast(fit.BCE1.A, h=term)
+fcastBCE2.1 <- forecast(fit.BCE1.B, h=term)
+fcastBCE3.1 <- forecast(fit.BCE1.C, h=term)
+fcastBCE4.1 <- forecast(fit.BCE1.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastBCE1.1)
+plot(fcastBCE2.1)
+plot(fcastBCE3.1)
+plot(fcastBCE4.1)
+
+#Forecasting Citigroup
+fcastC1.1 <- forecast(fit.C1.A, h=term)
+fcastC2.1 <- forecast(fit.C1.B, h=term)
+fcastC3.1 <- forecast(fit.C1.C, h=term)
+fcastC4.1 <- forecast(fit.C1.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastC1.1)
+plot(fcastC2.1)
+plot(fcastC3.1)
+plot(fcastC4.1)
+
+#Forecasting JP Morgan Chase
+fcastJPM1.1 <- forecast(fit.JPM1.A, h=term)
+fcastJPM2.1 <- forecast(fit.JPM1.B, h=term)
+fcastJPM3.1 <- forecast(fit.JPM1.C, h=term)
+fcastJPM4.1 <- forecast(fit.JPM1.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastJPM1.1)
+plot(fcastJPM2.1)
+plot(fcastJPM3.1)
+plot(fcastJPM4.1)
+```
+
+
+## Determining best Arima Model
+```{r}
+#Substract MAPE from 100. MAPE = Mean Accuracy Percentage Error 
+accuracyT1.1 <-  accuracy(fcastT1.1)
+accuracyT1.1 <- 100-accuracyT1.1[,5]
+accuracyT2.1 <-  accuracy(fcastT2.1)
+accuracyT2.1 <- 100-accuracyT2.1[,5]
+accuracyT3.1 <-  accuracy(fcastT3.1)
+accuracyT3.1 <- 100-accuracyT3.1[,5]
+accuracyT4.1 <-  accuracy(fcastT4.1)
+accuracyT4.1 <- 100-accuracyT4.1[,5]
+
+accuracyBCE1.1 <-  accuracy(fcastBCE1.1)
+accuracyBCE1.1 <- 100-accuracyBCE1.1[,5]
+accuracyBCE2.1 <-  accuracy(fcastBCE2.1)
+accuracyBCE2.1 <- 100-accuracyBCE2.1[,5]
+accuracyBCE3.1 <-  accuracy(fcastBCE3.1)
+accuracyBCE3.1 <- 100-accuracyBCE3.1[,5]
+accuracyBCE4.1 <-  accuracy(fcastBCE4.1)
+accuracyBCE4.1 <- 100-accuracyBCE4.1[,5]
+
+accuracyC1.1 <-  accuracy(fcastC1.1)
+accuracyC1.1 <- 100-accuracyC1.1[,5]
+accuracyC2.1 <-  accuracy(fcastC2.1)
+accuracyC2.1 <- 100-accuracyC2.1[,5]
+accuracyC3.1 <-  accuracy(fcastC3.1)
+accuracyC3.1 <- 100-accuracyC3.1[,5]
+accuracyC4.1 <-  accuracy(fcastC4.1)
+accuracyC4.1 <- 100-accuracyC4.1[,5]
+
+accuracyJPM1.1 <-  accuracy(fcastJPM1.1)
+accuracyJPM1.1 <- 100-accuracyJPM1.1[,5]
+accuracyJPM2.1 <-  accuracy(fcastJPM2.1)
+accuracyJPM2.1 <- 100-accuracyJPM2.1[,5]
+accuracyJPM3.1 <-  accuracy(fcastJPM3.1)
+accuracyJPM3.1 <- 100-accuracyJPM3.1[,5]
+accuracyJPM4.1 <-  accuracy(fcastJPM4.1)
+accuracyJPM4.1 <- 100-accuracyJPM4.1[,5]
+
+
+Accuracy.tableDB1 <- data.frame(Model = 1:4, 
+                             'T' = c(accuracyT1.1, accuracyT2.1, accuracyT3.1, accuracyT4.1),
+                             'BCE' = c(accuracyBCE1.1, accuracyBCE2.1, accuracyBCE3.1, accuracyBCE4.1),
+                             'C' = c(accuracyC1.1, accuracyC2.1, accuracyC3.1, accuracyC4.1),
+                             'JPM' = c(accuracyJPM1.1, accuracyJPM2.1, accuracyJPM3.1, accuracyJPM4.1))
+```
+
+
+# Data breach #2
+## Retrieving data
+```{r}
+#Actual returns
+getSymbols(stock[1,], src="yahoo", 
+           from = AFrom2[1,],
+           to = ATo2[1,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+T2.Close_Prices <- T[,4]
+
+getSymbols(stock[2,], src="yahoo", 
+           from = AFrom2[2,],
+           to = ATo2[2,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+BCE2.Close_Prices <- BCE.TO[,4]
+
+getSymbols(stock[3,], src="yahoo", 
+           from = AFrom2[3,],
+           to = ATo2[3,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+C2.Close_Prices <- C[,4]
+
+getSymbols(stock[4,], src="yahoo", 
+           from = AFrom2[4,],
+           to = ATo2[4,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+JPM2.Close_Prices <- JPM[,4]
+
+par(mfrow=c(2,2))
+plot(T2.Close_Prices, main = "AT&T (data breach #2)")
+plot(BCE2.Close_Prices, main = "Bell Canada (data breach #2)")
+plot(C2.Close_Prices, main = "Citigroup (data breach #2)")
+plot(JPM2.Close_Prices, main = "JP Morgan Chase (data breach #2)")
+```
+
+
+## Checking data
+```{r}
+par(mfrow=c(1,2))
+Acf(T2.Close_Prices, main="ACF")
+Pacf(T2.Close_Prices, main="PACF")
+
+par(mfrow=c(1,2))
+Acf(BCE2.Close_Prices, main="ACF")
+Pacf(BCE2.Close_Prices, main="PACF")
+
+par(mfrow=c(1,2))
+Acf(C2.Close_Prices, main="ACF")
+Pacf(C2.Close_Prices, main="PACF")
+
+par(mfrow=c(1,2))
+Acf(JPM2.Close_Prices, main="ACF")
+Pacf(JPM2.Close_Prices, main="PACF")
+```
+
+```{r}
+#ADF test for p-value
+#Should be higher than 0.05 to accept H0
+print(adf.test(T2.Close_Prices)) 
+print(adf.test(BCE2.Close_Prices)) 
+print(adf.test(C2.Close_Prices)) 
+print(adf.test(JPM2.Close_Prices)) 
+```
+
+
+## Arima models
+```{r}
+#auto.arima model
+fit.T2.A = auto.arima(T2.Close_Prices, seasonal = FALSE) #0,1,0
+fit.BCE2.A = auto.arima(BCE2.Close_Prices, seasonal = FALSE) #0,2,1
+fit.C2.A = auto.arima(C2.Close_Prices, seasonal = FALSE) #0,1,0
+fit.JPM2.A = auto.arima(JPM2.Close_Prices, seasonal = FALSE) #0,1,0
+
+#Playing around with parameters
+fit.T2.B = Arima(T2.Close_Prices, order = c(1,2,4))
+fit.BCE2.B = Arima(BCE2.Close_Prices, order = c(1,2,4))
+fit.C2.B = Arima(C2.Close_Prices, order = c(1,2,4))
+fit.JPM2.B = Arima(JPM2.Close_Prices, order = c(1,2,4))
+
+#Playing around with parameters
+fit.T2.C = Arima(T2.Close_Prices, order = c(1,1,0))
+fit.BCE2.C = Arima(BCE2.Close_Prices, order = c(1,2,1))
+fit.C2.C = Arima(C2.Close_Prices, order = c(1,1,0))
+fit.JPM2.C = Arima(JPM2.Close_Prices, order = c(1,1,0))
+
+#Standard default Arima model
+fit.T2.D = Arima(T2.Close_Prices, order = c(1,1,1))
+fit.BCE2.D = Arima(BCE2.Close_Prices, order = c(1,1,1))
+fit.C2.D = Arima(C2.Close_Prices, order = c(1,1,1))
+fit.JPM2.D = Arima(JPM2.Close_Prices, order = c(1,1,0))
+```
+
+
+```{r}
+#Plots of Arima models
+term<-5
+
+#Forecasting AT&T
+fcastT1.2 <- forecast(fit.T2.A, h=term)
+fcastT2.2 <- forecast(fit.T2.B, h=term)
+fcastT3.2 <- forecast(fit.T2.C, h=term)
+fcastT4.2 <- forecast(fit.T2.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastT1.2)
+plot(fcastT2.2)
+plot(fcastT3.2)
+plot(fcastT4.2)
+
+#Forecasting Bell Canada
+fcastBCE1.2 <- forecast(fit.BCE2.A, h=term)
+fcastBCE2.2 <- forecast(fit.BCE2.B, h=term)
+fcastBCE3.2 <- forecast(fit.BCE2.C, h=term)
+fcastBCE4.2 <- forecast(fit.BCE2.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastBCE1.2)
+plot(fcastBCE2.2)
+plot(fcastBCE3.2)
+plot(fcastBCE4.2)
+
+#Forecasting Citigrouip
+fcastC1.2 <- forecast(fit.C2.A, h=term)
+fcastC2.2 <- forecast(fit.C2.B, h=term)
+fcastC3.2 <- forecast(fit.C2.C, h=term)
+fcastC4.2 <- forecast(fit.C2.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastC1.2)
+plot(fcastC2.2)
+plot(fcastC3.2)
+plot(fcastC4.2)
+
+#Forecasting JP Morgan Chase
+fcastJPM1.2 <- forecast(fit.JPM2.A, h=term)
+fcastJPM2.2 <- forecast(fit.JPM2.B, h=term)
+fcastJPM3.2 <- forecast(fit.JPM2.C, h=term)
+fcastJPM4.2 <- forecast(fit.JPM2.D, h=term)
+
+par(mfrow=c(2,2))
+plot(fcastJPM1.2)
+plot(fcastJPM2.2)
+plot(fcastJPM3.2)
+plot(fcastJPM4.2)
+```
+
+
+## Determining best Arima Model
+```{r}
+#Substract MAPE from 100. MAPE = Mean Accuracy Percentage Error 
+accuracyT1.2 <-  accuracy(fcastT1.2)
+accuracyT1.2 <- 100-accuracyT1.2[,5]
+accuracyT2.2 <-  accuracy(fcastT2.2)
+accuracyT2.2 <- 100-accuracyT2.2[,5]
+accuracyT3.2 <-  accuracy(fcastT3.2)
+accuracyT3.2 <- 100-accuracyT3.2[,5]
+accuracyT4.2 <-  accuracy(fcastT4.2)
+accuracyT4.2 <- 100-accuracyT4.2[,5]
+
+accuracyBCE1.2 <-  accuracy(fcastBCE1.2)
+accuracyBCE1.2 <- 100-accuracyBCE1.2[,5]
+accuracyBCE2.2 <-  accuracy(fcastBCE2.2)
+accuracyBCE2.2 <- 100-accuracyBCE2.2[,5]
+accuracyBCE3.2 <-  accuracy(fcastBCE3.2)
+accuracyBCE3.2 <- 100-accuracyBCE3.2[,5]
+accuracyBCE4.2 <-  accuracy(fcastBCE4.2)
+accuracyBCE4.2 <- 100-accuracyBCE4.2[,5]
+
+accuracyC1.2 <-  accuracy(fcastC1.2)
+accuracyC1.2 <- 100-accuracyC1.2[,5]
+accuracyC2.2 <-  accuracy(fcastC2.2)
+accuracyC2.2 <- 100-accuracyC2.2[,5]
+accuracyC3.2 <-  accuracy(fcastC3.2)
+accuracyC3.2 <- 100-accuracyC3.2[,5]
+accuracyC4.2 <-  accuracy(fcastC4.2)
+accuracyC4.2 <- 100-accuracyC4.2[,5]
+
+accuracyJPM1.2 <-  accuracy(fcastJPM1.2)
+accuracyJPM1.2 <- 100-accuracyJPM1.2[,5]
+accuracyJPM2.2 <-  accuracy(fcastJPM2.2)
+accuracyJPM2.2 <- 100-accuracyJPM2.2[,5]
+accuracyJPM3.2 <-  accuracy(fcastJPM3.2)
+accuracyJPM3.2 <- 100-accuracyJPM3.2[,5]
+accuracyJPM4.2 <-  accuracy(fcastJPM4.2)
+accuracyJPM4.2 <- 100-accuracyJPM4.2[,5]
+
+
+Accuracy.tableDB2 <- data.frame(Model = 1:4, 
+                             'T' = c(accuracyT1.2, accuracyT2.2, accuracyT3.2, accuracyT4.2),
+                             'BCE' = c(accuracyBCE1.2, accuracyBCE2.2, accuracyBCE3.2, accuracyBCE4.2),
+                             'C' = c(accuracyC1.2, accuracyC2.2, accuracyC3.2, accuracyC4.2),
+                             'JPM' = c(accuracyJPM1.2, accuracyJPM2.2, accuracyJPM3.2, accuracyJPM4.2))
+```
+
+
+# Abnormal Returns Data breach 1
+```{r}
+#Normal returns
+Accuracy.tableDB1
+#T = Arima model 3
+#BCE = Arima model 1
+#C = Arima model 4
+#JPM = Arima model 1
+
+T1.Normal_Returns <- data.frame(T1.Normal_Returns = fcastT3.1$mean)
+BCE1.Normal_Returns <- data.frame(BCE1.Normal_Returns = fcastBCE1.1$mean)
+C1.Normal_Returns <- data.frame(C1.Normal_Returns = fcastC4.1$mean)
+JPM1.Normal_Returns <- data.frame(JPM1.Normal_Returns = fcastJPM1.1$mean)
+
+#Actual returns
+getSymbols(stock[1,], src="yahoo", 
+           from = ABFrom1[1,],
+           to = ABTo1[1,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+T1.Actual_Returns <- data.frame(T1.Actual_Returns = T[,4])
+
+getSymbols(stock[2,], src="yahoo", 
+           from = ABFrom1[2,],
+           to = ABTo1[2,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+BCE1.Actual_Returns <- data.frame(BCE1.Actual_Returns = BCE.TO[,4])
+
+getSymbols(stock[3,], src="yahoo", 
+           from = ABFrom1[3,],
+           to = ABTo1[3,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+C1.Actual_Returns <- data.frame(C1.Actual_Returns = C[,4])
+
+getSymbols(stock[4,], src="yahoo", 
+           from = ABFrom1[4,],
+           to = ABTo1[4,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+JPM1.Actual_Returns <- data.frame(JPM1.Actual_Returns = JPM[,4])
+```
+
+
+# Abnormal Returns Data breach 2
+```{r}
+#Normal returns
+Accuracy.tableDB2
+#T = Arima model 1
+#BCE = Arima model 2
+#C = Arima model 4
+#JPM = Arima model 2
+
+T2.Normal_Returns <- data.frame(T2.Normal_Returns = fcastT1.2$mean)
+BCE2.Normal_Returns <- data.frame(BCE2.Normal_Returns = fcastBCE2.2$mean)
+C2.Normal_Returns <- data.frame(C2.Normal_Returns = fcastC4.2$mean)
+JPM2.Normal_Returns <- data.frame(JPM2.Normal_RetDDSurns = fcastJPM2.2$mean)
+
+#Actual returns
+getSymbols(stock[1,], src="yahoo", 
+           from = ABFrom2[1,],
+           to = ABTo2[1,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+T2.Actual_Returns <- data.frame(T2.Actual_Returns = T[,4])
+
+getSymbols(stock[2,], src="yahoo", 
+           from = ABFrom2[2,],
+           to = ABTo2[2,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+BCE2.Actual_Returns <- data.frame(BCE2.Actual_Returns = BCE.TO[,4])
+
+getSymbols(stock[3,], src="yahoo", 
+           from = ABFrom2[3,],
+           to = ABTo2[3,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+C2.Actual_Returns <- data.frame(C2.Actual_Returns = C[,4])
+
+getSymbols(stock[4,], src="yahoo", 
+           from = ABFrom2[4,],
+           to = ABTo2[4,],
+           warnings = FALSE,
+           auto.assign = TRUE)
+JPM2.Actual_Returns <- data.frame(JPM2.Actual_Returns = JPM[,4])
+```
+
+
+```{r}
+#Define variables
+#TOTAL Abnormal returns
+NormalReturnsDB1 <- data.frame(T1.Normal_Returns, BCE1.Normal_Returns, C1.Normal_Returns, JPM1.Normal_Returns,
+                               row.names = c("-2", "-1", "0", "+1", "+2"))
+ActualReturnsDB1 <- data.frame(T1.Actual_Returns, BCE1.Actual_Returns, C1.Actual_Returns, JPM1.Actual_Returns,
+                               row.names = c("-2", "-1", "0", "+1", "+2"))
+AbnormalReturnsDB1 <- data.frame(AB = c(ActualReturnsDB1 - NormalReturnsDB1))
+
+NormalReturnsDB2 <- data.frame(T2.Normal_Returns, BCE2.Normal_Returns, C2.Normal_Returns, JPM2.Normal_Returns,
+                               row.names = c("-2", "-1", "0", "+1", "+2"))
+ActualReturnsDB2 <- data.frame(T2.Actual_Returns, BCE2.Actual_Returns, C2.Actual_Returns, JPM2.Actual_Returns,
+                               row.names = c("-2", "-1", "0", "+1", "+2"))
+AbnormalReturnsDB2 <- data.frame(AB = c(ActualReturnsDB2 - NormalReturnsDB2))
+```
+```{r}
+#Abnormal Returns (AR)
+AR.T1 <- T1.Actual_Returns - T1.Normal_Returns
+AR.BCE1 <- BCE1.Actual_Returns - BCE1.Normal_Returns
+AR.C1 <- C1.Actual_Returns - C1.Normal_Returns
+AR.JPM1 <- JPM1.Actual_Returns - JPM1.Normal_Returns
+
+AR.T2 <- T2.Actual_Returns - T2.Normal_Returns
+AR.BCE2 <- BCE2.Actual_Returns - BCE2.Normal_Returns
+AR.C2 <- C2.Actual_Returns - C2.Normal_Returns
+AR.JPM2 <- JPM2.Actual_Returns - JPM2.Normal_Returns
+
+#Cumulative Abnormal Returns (CAR) per entity
+CAR1.minus2.T  <- AR.T1[1,]
+CAR1.minus1.T  <- CAR1.minus2.T + AR.T1[2,]
+CAR1.0.T       <- CAR1.minus1.T + AR.T1[3,]
+CAR1.plus1.T   <- CAR1.0.T + AR.T1[4,]
+CAR1.plus2.T   <- CAR1.plus1.T + AR.T1[5,]
+CART1 <- data.frame(CAR1.minus2.T, CAR1.minus1.T, CAR1.0.T, CAR1.plus1.T, CAR1.plus2.T)
+
+CAR1.minus2.BCE  <- AR.BCE1[1,]
+CAR1.minus1.BCE  <- CAR1.minus2.BCE + AR.BCE1[2,]
+CAR1.0.BCE       <- CAR1.minus1.BCE + AR.BCE1[3,]
+CAR1.plus1.BCE   <- CAR1.0.BCE + AR.BCE1[4,]
+CAR1.plus2.BCE   <- CAR1.plus1.BCE + AR.BCE1[5,]
+CARBCE1 <- data.frame(CAR1.minus2.BCE, CAR1.minus1.BCE, CAR1.0.BCE, CAR1.plus1.BCE, CAR1.plus2.BCE)
+
+CAR1.minus2.C  <- AR.C1[1,]
+CAR1.minus1.C  <- CAR1.minus2.C + AR.C1[2,]
+CAR1.0.C       <- CAR1.minus1.C + AR.C1[3,]
+CAR1.plus1.C   <- CAR1.0.C + AR.C1[4,]
+CAR1.plus2.C   <- CAR1.plus1.C + AR.C1[5,]
+CARC1 <- data.frame(CAR1.minus2.C, CAR1.minus1.C, CAR1.0.C, CAR1.plus1.C, CAR1.plus2.C)
+
+CAR1.minus2.JPM  <- AR.JPM1[1,]
+CAR1.minus1.JPM  <- CAR1.minus2.JPM + AR.JPM1[2,]
+CAR1.0.JPM       <- CAR1.minus1.JPM + AR.JPM1[3,]
+CAR1.plus1.JPM   <- CAR1.0.JPM + AR.JPM1[4,]
+CAR1.plus2.JPM   <- CAR1.plus1.JPM + AR.JPM1[5,]
+CARJPM1 <- data.frame(CAR1.minus2.JPM, CAR1.minus1.JPM, CAR1.0.JPM, CAR1.plus1.JPM, CAR1.plus2.JPM)
+
+CARi1        <- data.frame(Days = rep(c(-2, -1, 0, +1, +2), times = 4),
+                            Organisation = c("AT&T", "AT&T", "AT&T", "AT&T", "AT&T", 
+                                            "Bell Canada", "Bell Canada", "Bell Canada", "Bell Canada", "Bell Canada", 
+                                            "Citigroup", "Citigroup", "Citigroup", "Citigroup", "Citigroup",
+                                            "JP Morgan Chase", "JP Morgan Chase", "JP Morgan Chase", "JP Morgan Chase",
+                                            "JP Morgan Chase"),
+                            CAR = c(CAR1.minus2.T, CAR1.minus1.T, CAR1.0.T, CAR1.plus1.T, CAR1.plus2.T,
+                                      CAR1.minus2.BCE, CAR1.minus1.BCE, CAR1.0.BCE, CAR1.plus1.BCE, CAR1.plus2.BCE,
+                                      CAR1.minus2.C, CAR1.minus1.C, CAR1.0.C, CAR1.plus1.C, CAR1.plus2.C,
+                                      CAR1.minus2.JPM, CAR1.minus1.JPM, CAR1.0.JPM, CAR1.plus1.JPM,
+                                                  CAR1.plus2.JPM))
+CAR2.minus2.T  <- AR.T2[1,]
+CAR2.minus1.T  <- CAR2.minus2.T + AR.T2[2,]
+CAR2.0.T       <- CAR2.minus1.T + AR.T2[3,]
+CAR2.plus1.T   <- CAR2.0.T + AR.T2[4,]
+CAR2.plus2.T   <- CAR2.plus1.T + AR.T2[5,]
+
+CAR2.minus2.BCE  <- AR.BCE2[1,]
+CAR2.minus1.BCE  <- CAR2.minus2.BCE + AR.BCE2[2,]
+CAR2.0.BCE       <- CAR2.minus1.BCE + AR.BCE2[3,]
+CAR2.plus1.BCE   <- CAR2.0.BCE + AR.BCE2[4,]
+CAR2.plus2.BCE   <- CAR2.plus1.BCE + AR.BCE2[5,]
+
+CAR2.minus2.C  <- AR.C2[1,]
+CAR2.minus1.C  <- CAR2.minus2.C + AR.C2[2,]
+CAR2.0.C       <- CAR2.minus1.C + AR.C2[3,]
+CAR2.plus1.C   <- CAR2.0.C + AR.C2[4,]
+CAR2.plus2.C   <- CAR2.plus1.C + AR.C2[5,]
+
+CAR2.minus2.JPM  <- AR.JPM2[1,]
+CAR2.minus1.JPM  <- CAR2.minus2.JPM + AR.JPM2[2,]
+CAR2.0.JPM       <- CAR2.minus1.JPM + AR.JPM2[3,]
+CAR2.plus1.JPM   <- CAR2.0.JPM + AR.JPM2[4,]
+CAR2.plus2.JPM   <- CAR2.plus1.JPM + AR.JPM2[5,]
+
+CART2 <- data.frame(CAR2.minus2.T, CAR2.minus1.T, CAR2.0.T, CAR2.plus1.T, CAR2.plus2.T)
+CARBCE2 <- data.frame(CAR2.minus2.BCE, CAR2.minus1.BCE, CAR2.0.BCE, CAR2.plus1.BCE, CAR2.plus2.BCE)
+CARC2 <- data.frame(CAR2.minus2.C, CAR2.minus1.C, CAR2.0.C, CAR2.plus1.C, CAR2.plus2.C)
+CARJPM2 <- data.frame(CAR2.minus2.JPM, CAR2.minus1.JPM, CAR2.0.JPM, CAR2.plus1.JPM, CAR2.plus2.JPM)
+
+CARi2         <- data.frame(Days = rep(c(-2, -1, 0, +1, +2), times = 4),
+                            Organisation = c("AT&T", "AT&T", "AT&T", "AT&T", "AT&T", 
+                                            "Bell Canada", "Bell Canada", "Bell Canada", "Bell Canada", "Bell Canada", 
+                                            "Citigroup", "Citigroup", "Citigroup", "Citigroup", "Citigroup",
+                                            "JP Morgan Chase", "JP Morgan Chase", "JP Morgan Chase", "JP Morgan Chase",
+                                            "JP Morgan Chase"),
+                            CAR = c(CAR2.minus2.T, CAR2.minus1.T, CAR2.0.T, CAR2.plus1.T, CAR2.plus2.T,
+                                      CAR2.minus2.BCE, CAR2.minus1.BCE, CAR2.0.BCE, CAR2.plus1.BCE, CAR2.plus2.BCE,
+                                      CAR2.minus2.C, CAR2.minus1.C, CAR2.0.C, CAR2.plus1.C, CAR2.plus2.C,
+                                      CAR2.minus2.JPM, CAR2.minus1.JPM, CAR2.0.JPM, CAR2.plus1.JPM,
+                                                  CAR2.plus2.JPM))
+
+ggplot(data=CARi1, aes(x=reorder(Days,+Days), y=CAR, fill=Organisation)) +
+  geom_bar(stat="identity", position=position_dodge(), xlab="Days") + 
+  labs(x="Days", y="")
+
+ggplot(data=CARi2, aes(x=reorder(Days,+Days), y=CAR, fill=Organisation)) +
+  geom_bar(stat="identity", position=position_dodge(), xlab="Days") + 
+  labs(x="Days", y="")
+
+
+boxplot(CARi1$CAR, CARi2$CAR,
+main="",
+xlab="Group 1                                                        Group 2",
+ylab="CAR",
+col="lightBlue",
+border="Black"
+)
+
+#Cumulative Abnormal Returns (CAR)
+CAR1.minus2 <- sum(AR.T1[1,], AR.BCE1[1,], AR.C1[1,], AR.JPM1[1,])
+CAR1.minus1 <- CAR1.minus2 + sum(AR.T1[2,], AR.BCE1[2,], AR.C1[2,], AR.JPM1[2,])
+CAR1.0      <- CAR1.minus1 + sum(AR.T1[3,], AR.BCE1[3,], AR.C1[3,], AR.JPM1[3,])
+CAR1.plus1  <- CAR1.0 +     sum(AR.T1[4,], AR.BCE1[4,], AR.C1[4,], AR.JPM1[4,])
+CAR1.plus2  <- CAR1.plus1 + sum(AR.T1[5,], AR.BCE1[5,], AR.C1[5,], AR.JPM1[5,])
+CAR1 <- data.frame(CAR1.minus2, CAR1.minus1, CAR1.0, CAR1.plus1, CAR1.plus2)
+
+CAR2.minus2 <- sum(AR.T2[1,], AR.BCE2[1,], AR.C2[1,], AR.JPM2[1,])
+CAR2.minus1 <- CAR2.minus2 + sum(AR.T2[2,], AR.BCE2[2,], AR.C2[2,], AR.JPM2[2,])
+CAR2.0      <- CAR2.minus1 + sum(AR.T2[3,], AR.BCE2[3,], AR.C2[3,], AR.JPM2[3,])
+CAR2.plus1  <- CAR2.0 +     sum(AR.T2[4,], AR.BCE2[4,], AR.C2[4,], AR.JPM2[4,])
+CAR2.plus2  <- CAR2.plus1 + sum(AR.T2[5,], AR.BCE2[5,], AR.C2[5,], AR.JPM2[5,])
+CAR2 <- data.frame(CAR2.minus2, CAR2.minus1, CAR2.0, CAR2.plus1, CAR2.plus2)
+```
+```{r}
+#Average Abnormal Returns (AAR)
+AAR1.minus2 <- sum(AR.T1[1,], AR.BCE1[1,], AR.C1[1,], AR.JPM1[1,])/4
+AAR1.minus1 <- sum(AR.T1[2,], AR.BCE1[2,], AR.C1[2,], AR.JPM1[2,])/4
+AAR1.0 <- sum(AR.T1[3,], AR.BCE1[3,], AR.C1[3,], AR.JPM1[3,])/4
+AAR1.plus1 <- sum(AR.T1[4,], AR.BCE1[4,], AR.C1[4,], AR.JPM1[4,])/4
+AAR1.plus2 <- sum(AR.T1[5,], AR.BCE1[5,], AR.C1[5,], AR.JPM1[5,])/4
+AAR1 <- data.frame(AAR1.minus2, AAR1.minus1, AAR1.0, AAR1.plus1, AAR1.plus2)
+
+AAR2.minus2 <- sum(AR.T2[1,], AR.BCE2[1,], AR.C2[1,], AR.JPM2[1,])/4
+AAR2.minus1 <- sum(AR.T2[2,], AR.BCE2[2,], AR.C2[2,], AR.JPM2[2,])/4
+AAR2.0 <- sum(AR.T2[3,], AR.BCE2[3,], AR.C2[3,], AR.JPM2[3,])/4
+AAR2.plus1 <- sum(AR.T2[4,], AR.BCE2[4,], AR.C2[4,], AR.JPM2[4,])/4
+AAR2.plus2 <- sum(AR.T2[5,], AR.BCE2[5,], AR.C2[5,], AR.JPM2[5,])/4
+AAR2 <- data.frame(AAR2.minus2, AAR2.minus1, AAR2.0, AAR2.plus1, AAR2.plus2)
+
+#Cumulative Average Abnormal Returns (CAAR)
+CAAR1.minus2  <- AAR1.minus2
+CAAR1.minus1  <- AAR1.minus2 + AAR1.minus1
+CAAR1.0       <- AAR1.minus2 + AAR1.minus1 + AAR1.0
+CAAR1.plus1   <- AAR1.minus2 + AAR1.minus1 + AAR1.0 + AAR1.plus1
+CAAR1.plus2   <- AAR1.minus2 + AAR1.minus1 + AAR1.0 + AAR1.plus1 + AAR1.plus2
+CAAR1 <- data.frame(CAAR1.minus2, CAAR1.minus1, CAAR1.0, CAAR1.plus1, CAAR1.plus2)
+
+CAAR2.minus2  <- AAR2.minus2
+CAAR2.minus1  <- AAR2.minus2 + AAR2.minus1
+CAAR2.0       <- AAR2.minus2 + AAR2.minus1 + AAR2.0
+CAAR2.plus1   <- AAR2.minus2 + AAR2.minus1 + AAR2.0 + AAR2.plus1
+CAAR2.plus2   <- AAR2.minus2 + AAR2.minus1 + AAR2.0 + AAR2.plus1 + AAR2.plus2
+CAAR2 <- data.frame(CAAR2.minus2, CAAR2.minus1, CAAR2.0, CAAR2.plus1, CAAR2.plus2)
+```
+```{r}
+#Merge AAR & CAAR
+AAR.CAAR1 <- data.frame(Days = c(-2, -1, 0, +1, +2, -2, -1, 0, +1, +2),
+                     AARCAAR = c(AAR1.minus2, AAR1.minus1, AAR1.0, AAR1.plus1, AAR1.plus2, 
+                                  CAAR1.minus2, CAAR1.minus1, CAAR1.0, CAAR1.plus1, CAAR1.plus2),
+                     Category = c("AAR", "AAR", "AAR", "AAR", "AAR", "CAAR", "CAAR", "CAAR", "CAAR", "CAAR"))
+AAR.CAAR1 <- AAR.CAAR1[order(AAR.CAAR1$Days),]
+
+AAR.CAAR2 <- data.frame(Days = c(-2, -1, 0, +1, +2, -2, -1, 0, +1, +2),
+                     AARCAAR = c(AAR2.minus2, AAR2.minus1, AAR2.0, AAR2.plus1, AAR2.plus2, 
+                                  CAAR2.minus2, CAAR2.minus1, CAAR2.0, CAAR2.plus1, CAAR2.plus2),
+                     Category = c("AAR", "AAR", "AAR", "AAR", "AAR", "CAAR", "CAAR", "CAAR", "CAAR", "CAAR"))
+AAR.CAAR2 <- AAR.CAAR2[order(AAR.CAAR2$Days),]
+
+TotalAAR.CAAR <- data.frame(Days =c(-2, -2, -1, -1, 0, 0, +1, +1, +2, +2),
+                            AARCAAR = c(AAR.CAAR1$AARCAAR + AAR.CAAR2$AARCAAR),
+                            Category = rep(c("AAR", "CAAR"), times = 5))
+TotalAAR.CAAR <- TotalAAR.CAAR[order(TotalAAR.CAAR$Days),]
+
+#Visualize AAR & CAAR
+ggplot(data=AAR.CAAR1, aes(x=reorder(Days,+Days), y=AARCAAR, fill=Category)) +
+  geom_bar(stat="identity", position=position_dodge(), xlab="Days") + 
+  geom_text(aes(label=round(AARCAAR, digits = 2)), position=position_dodge(width=0.9), vjust=-0.25)+
+  labs(x="Days", y="")
+
+ggplot(data=AAR.CAAR2, aes(x=reorder(Days,+Days), y=AARCAAR, fill=Category)) +
+  geom_bar(stat="identity", position=position_dodge(), xlab="Days") + 
+  geom_text(aes(label=round(AARCAAR, digits = 2)), position=position_dodge(width=0.9), vjust=-0.25)+
+  labs(x="Days", y="")
+
+ggplot(data=TotalAAR.CAAR, aes(x=reorder(Days,+Days), y=AARCAAR, fill=Category)) +
+  geom_bar(stat="identity", position=position_dodge(), xlab="Days") + 
+  geom_text(aes(label=round(AARCAAR, digits = 2)), position=position_dodge(width=0.9), vjust=-0.25)+
+  labs(x="Days", y="")
+
+TESTAAR1 <- data.frame(Days = c(-2, -1, 0, +1, +2),
+                     AAR = c(AAR1.minus2, AAR1.minus1, AAR1.0, AAR1.plus1, AAR1.plus2),
+                     Category = c("AAR", "AAR", "AAR", "AAR", "AAR"))
+TESTAAR1 <- TESTAAR1[order(TESTAAR1$Days),]
+
+TESTAAR2 <- data.frame(Days = c(-2, -1, 0, +1, +2),
+                     AAR = c(AAR2.minus2, AAR2.minus1, AAR2.0, AAR2.plus1, AAR2.plus2),
+                     Category = c("AAR", "AAR", "AAR", "AAR", "AAR"))
+TESTAAR2 <- TESTAAR2[order(TESTAAR2$Days),]
+
+TESTCAAR1 <- data.frame(Days = c(-2, -1, 0, +1, +2),
+                     CAAR = c(CAAR1.minus2, CAAR1.minus1, CAAR1.0, CAAR1.plus1, CAAR1.plus2),
+                     Category = c("CAAR", "CAAR", "CAAR", "CAAR", "CAAR"))
+TESTCAAR1 <- TESTCAAR1[order(TESTCAAR1$Days),]
+
+TESTCAAR2 <- data.frame(Days = c(-2, -1, 0, +1, +2),
+                     CAAR = c(CAAR2.minus2, CAAR2.minus1, CAAR2.0, CAAR2.plus1, CAAR2.plus2),
+                     Category = c("CAAR", "CAAR", "CAAR", "CAAR", "CAAR"))
+TESTCAAR2 <- TESTCAAR2[order(TESTCAAR2$Days),]
+
+
+par(mfrow=c(1,2))
+boxplot(TESTAAR1$AAR, TESTAAR2$AAR,
+main="",
+xlab="Group 1              Group 2",
+ylab="AAR",
+col="lightBlue",
+border="Black"
+)
+
+
+boxplot(TESTCAAR1$CAAR, TESTCAAR2$CAAR,
+main="",
+xlab="Group 1              Group 2",
+ylab="CAAR",
+col="lightBlue",
+border="Black"
+)
+```
+
+
+## Data breach 1 & 2
+### Parametric tests - AR T test & CAR T test
+```{r}
+ART.TestT1 <- t.test(AR.T1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestBCE1 <- t.test(AR.BCE1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestC1 <- t.test(AR.C1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestJPM1 <- t.test(AR.JPM1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestT2 <- t.test(AR.T2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestBCE2 <- t.test(AR.BCE2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestC2 <- t.test(AR.C2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+ART.TestJPM2 <- t.test(AR.JPM2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestT1 <- t.test(CART1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestBCE1 <- t.test(CARBCE1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestC1 <- t.test(CARC1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestJPM1 <- t.test(CARJPM1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestT2 <- t.test(CART2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestBCE2 <- t.test(CARBCE2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestC2 <- t.test(CARC2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CART.TestJPM2 <- t.test(CARJPM2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+
+AR.T.Test <- data.frame(Organisation = c("AT&T", "Bell Canada", "Citigroup", "JP Morgan Chase"),
+                         "AR1 - P.Value" = round(c(ART.TestT1$p.value, ART.TestBCE1$p.value, ART.TestC1$p.value,
+                                            ART.TestJPM1$p.value), digit =3),
+                        "AR1 - Mean" = round(c(ART.TestT1$estimate, ART.TestBCE1$estimate, ART.TestC1$estimate,
+                                            ART.TestJPM1$estimate), digit =3),
+                        "AR2 - P.Value" = round(c(ART.TestT2$p.value, ART.TestBCE2$p.value, ART.TestC2$p.value,
+                                            ART.TestJPM2$p.value), digit =3),
+                        "AR2 - Mean" = round(c(ART.TestT2$estimate, ART.TestBCE2$estimate, ART.TestC2$estimate,
+                                            ART.TestJPM2$estimate), digit =3))
+
+CAR.T.Test <- data.frame(Organisation = c("AT&T", "Bell Canada", "Citigroup", "JP Morgan Chase"),
+                         "CAR1 - P.Value" = round(c(CART.TestT1$p.value, CART.TestBCE1$p.value, CART.TestC1$p.value,
+                                            CART.TestJPM1$p.value), digit =3),
+                         "CAR1 - Mean" = round(c(CART.TestT1$estimate, CART.TestBCE1$estimate, CART.TestC1$estimate,
+                                            CART.TestJPM1$estimate), digit =3),
+                        "CAR2 - P.Value" = round(c(CART.TestT2$p.value, CART.TestBCE2$p.value, CART.TestC2$p.value,
+                                            CART.TestJPM2$p.value), digit =3),
+                        "CAR2 - Mean" = round(c(CART.TestT2$estimate, CART.TestBCE2$estimate, CART.TestC2$estimate,
+                                            CART.TestJPM2$estimate), digit =3))
+
+AR.T.Test
+CAR.T.Test
+```
+
+### Parametric tests - Cross-Sectional Test
+```{r}
+CSAAR1 <- t.test(AAR1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CSAAR2 <- t.test(AAR2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CSCAAR1 <- t.test(CAAR1,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+CSCAAR2 <- t.test(CAAR2,
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+Cross.Sectional.Test <- data.frame(Organisation = c("Group 1", "Group 2"),
+                         "AAR - P.Value" = round(c(CSAAR1$p.value, CSAAR2$p.value), digit =3),
+                         "AAR - mean" = round(c(CSAAR1$estimate, CSAAR2$estimate), digit=3),
+                        "CAAR - P.Value" = round(c(CSCAAR1$p.value, CSCAAR2$p.value), digit =3),
+                        "CAAR - mean" = round(c(CSCAAR1$estimate, CSCAAR2$estimate), digit=3))
+
+TotalAAR <- data.frame(AAR1, AAR2)
+TotalCAAR <- data.frame(CAAR1, CAAR2)
+
+t.test(as.numeric(TotalAAR),
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+t.test(as.numeric(TotalCAAR),
+       alternative = "less",
+       mu = 0, paired = FALSE, var.equal = FALSE,
+       conf.level = 0.95)
+
+
+```
+
+
+### Nonparametric tests - Cowan Generalized Sign Test
+```{r}
+STAAR1 <- SIGN.test(
+  as.numeric(AAR1),
+  y = NULL,
+  md = 0,
+  alternative = "less",
+  conf.level = 0.95,
+)
+
+STAAR2 <- SIGN.test(
+  as.numeric(AAR2),
+  y = NULL,
+  md = 0,
+  alternative = "less",
+  conf.level = 0.95,
+)
+
+STCAAR1 <- SIGN.test(
+  as.numeric(CAAR1),
+  y = NULL,
+  md = 0,
+  alternative = "less",
+  conf.level = 0.95,
+)
+
+STCAAR2 <- SIGN.test(
+  as.numeric(CAAR2),
+  y = NULL,
+  md = 0,
+  alternative = "less",
+  conf.level = 0.95,
+)
+
+Sign.Test <- data.frame(Organisation = c("Group 1", "Group 2"),
+                         "AAR - P.Value" = round(c(STAAR1$p.value, STAAR2$p.value), digit =3),
+                        "AAR - mean" = round(c(STAAR1$estimate, STAAR2$estimate), digit =3),
+                        "CAAR - P.Value" = round(c(STCAAR1$p.value, STCAAR2$p.value), digit =3),
+                        "CAAR - mean" = round(c(STCAAR1$estimate, STCAAR2$estimate), digit =3))
+
+
+SIGN.test(
+  as.numeric(TotalAAR),
+  y = NULL,
+  md = 0,
+  alternative = "less",
+  conf.level = 0.95,
+)
+
+SIGN.test(
+  as.numeric(TotalCAAR),
+  y = NULL,
+  md = 0,
+  alternative = "less",
+  conf.level = 0.95,
+)
+```
+
+```{r}
+#value of the Shapiro-Wilk Test is greater than 0.05, the data is normal. If it is below 0.05, the data significantly deviate from a normal distribution.
+shapiro.test(CARi1$CAR)
+shapiro.test(CARi2$CAR)
+
+wilcox.test(as.numeric(CAAR1), as.numeric(CAAR2), paired=TRUE)
+wilcox.test(as.numeric(CARi1$CAR), as.numeric(CARi2$CAR), paired=TRUE)
+```
