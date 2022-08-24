@@ -4,6 +4,7 @@ In 2022, I wrote a thesis investigating the effect of data breach events on a fi
 For this thesis, I evaluated the following Hypotheses:
 
 H1. Data breach events lead to negative abnormal returns for the stock price of the affected organisation.
+
 H2. Subsequent data breach events lead to negative abnormal returns for the stock price of the affected organisation 
     to a lesser extent compared to the initial data breach event. 
 
